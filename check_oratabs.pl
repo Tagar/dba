@@ -7,23 +7,61 @@
 	where x=2 for RON, and maximum current number of instances for RAC database.
 	Will report if entry is in /etc/oratab, but is pointing to a wrong OH
 	(per srvctl condig database output).
-	
-	Usage: add GI bin home to PATH and launch this script without parameters.
+
+	Usage: add GI bin home to PATH and launch this script without parameters first time.
+	When you confirm all oratab-$node.good files are okay, run the script second time
+	with --apply parameter - it just copies generated previously .good files to remote
+	oratabs. Original /etc/oratab from all servers are saved locally as .saved files.
 =cut
 
 use strict;
 use constant (DEBUG => 0);
+use Getopt::Long;
 
+my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
+
+
+my $apply;
+GetOptions('apply'=>\$apply) || die "Usage: $0 [--apply]\n";
+if ($apply) #Apply mode:
+{	#applying previously generated oratab.good files to remote hosts
+	foreach my $fname (<./oratab-*.good>)
+	{	print "\n";
+		$fname =~ /oratab-(.+?)\.good$/ || next;
+		my $node = $1;
+		my ($size,$mtime) = (stat($fname))[7,9];
+		$mtime = scalar localtime $mtime;
+		unless (prompt_yn("File $fname ($size bytes) modified $mtime will be copied to /etc/oratab at $node. \t"))
+			{	print "Skipped\n"; next	}
+		#1. Save original remote file locally
+		my ($saved_fname, $i);
+		do {	$saved_fname = "./oratab-$node.saved";
+				$saved_fname .= "_$i" if $i++;
+		} while -e $saved_fname;
+		my $scp = `scp $quite_ssh $node:/etc/oratab $saved_fname`;
+		$? == 0 || die "Could not save /etc/oratab from $node: $!";
+		print "Original file saved as $saved_fname\n";
+		#2. Overwrite remote oratab
+		$scp = `scp $quite_ssh $fname $node:/etc/oratab`;
+		$? == 0 || die "Could copy file to /etc/oratab from $node: $!";
+		print "$fname overwritten /etc/oratab on $node\n";
+	}
+	exit 0;
+}
+
+
+#No options specified, complete the first run:
 
 #1. Checking all cloud nodes.
 my $crs_stat = `crsctl stat res -t -w "TYPE = ora.cluster_vip_net1.type"`	#or net2 too?
 	|| die "Error running crsctl stat res for vip: $!";
 my %oratab; #hash(by nodes) of hashes(by db/sid name), value is OH
 my %asmtab;	#hash(by node), value is ASM sid colon(:) GI home
+my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
 foreach my $line (split /\n/, $crs_stat)
 {	next if $line !~ /^ora\.(.+?)\.vip$/;
 	my $node = $1;
-	my $oratab = `ssh -q -o PasswordAuthentication=no -o StrictHostKeyChecking=no $node "cat /etc/oratab"`;
+	my $oratab = `ssh $quite_ssh $node "cat /etc/oratab"`;
 	$? == 0 || die "Could not fetch /etc/oratab from $node: $!";
 	print "/etc/oratab is ".length($oratab)." bytes long on $node:\n";
 	#parse the oratab file:
@@ -141,7 +179,7 @@ foreach my $node (sort keys %oratab)
 		}
 	}
 	if (@mismatches)
-	{	print "Wrong /etc/oratab entries on $node:\n";
+	{	print "Entries in /etc/oratab at $node with wrong OH:\n";
 		print "  ".join(',',@mismatches)."\n";
 	}
 }
@@ -156,5 +194,34 @@ foreach my $node (sort keys %oratab)
 	}
 }
 
+
+print "\n";
+
+#6. Check if there are any databases or ASM instances running that were not added to clusterware
+foreach my $node (sort keys %oratab)
+{	my $pmons = `ssh $quite_ssh $node "ps -ef | grep pmon | grep -v grep | cut -d'_' -f 3,4"`;
+	$? == 0 || die "Could not fetch list of processes from $node: $!";
+	foreach my $sid (split /\n/, $pmons)
+	{	
+		if ( substr($sid,0,1) eq '+' ? $asmtab{$node} !~ /^\Q$sid\E:/ : !$allsid{$sid} )
+		{ print "pmon for unknown sid $sid is running on $node. Will not be added to oratab.good files.\n" }
+	}
+}
+
+
+exit;
+
+sub prompt {
+  my ($query) = @_; # take a prompt string as argument
+  local $| = 1; # activate autoflush to immediately show the prompt
+  print $query;
+  chomp(my $answer = <STDIN>);
+  return $answer;
+}
+sub prompt_yn {
+  my ($query) = @_;
+  my $answer = prompt("$query (Y/N): ");
+  return lc($answer) eq 'y';
+}
 
 
