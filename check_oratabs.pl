@@ -36,7 +36,7 @@ if ($apply) #Apply mode:
 		#1. Save original remote file locally
 		my ($saved_fname, $i);
 		do {	$saved_fname = "./oratab-$node.saved";
-				$saved_fname .= "_$i" if $i++;
+				$saved_fname .= "_$i" if $i++;			#don't overwrite .saved files - find a new filename
 		} while -e $saved_fname;
 		my $scp = `scp $quite_ssh $node:/etc/oratab $saved_fname`;
 		$? == 0 || die "Could not save /etc/oratab from $node: $!";
@@ -57,7 +57,6 @@ my $crs_stat = `crsctl stat res -t -w "TYPE = ora.cluster_vip_net1.type"`	#or ne
 	|| die "Error running crsctl stat res for vip: $!";
 my %oratab; #hash(by nodes) of hashes(by db/sid name), value is OH
 my %asmtab;	#hash(by node), value is ASM sid colon(:) GI home
-my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
 foreach my $line (split /\n/, $crs_stat)
 {	next if $line !~ /^ora\.(.+?)\.vip$/;
 	my $node = $1;
