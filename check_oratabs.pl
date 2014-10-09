@@ -57,6 +57,7 @@ my $crs_stat = `crsctl stat res -t -w "TYPE = ora.cluster_vip_net1.type"`	#or ne
 	|| die "Error running crsctl stat res for vip: $!";
 my %oratab; #hash(by nodes) of hashes(by db/sid name), value is OH
 my %asmtab;	#hash(by node), value is ASM sid colon(:) GI home
+my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
 foreach my $line (split /\n/, $crs_stat)
 {	next if $line !~ /^ora\.(.+?)\.vip$/;
 	my $node = $1;
@@ -80,9 +81,10 @@ foreach my $line (split /\n/, $crs_stat)
 print "\n";
 
 #2. Checking all databases
-my (%dbtype,%dbinst,%dbhome);
+my (%dbtype,%dbhome,%inst,%dbinst);
 # %dbtype - RAC, RACOneNode (or SingleInstance - check if there are any);
 # %dbinst - how many instances have a RAC database;
+# %inst   - list of comma-separated instances from srvctl's "Database instances"
 # %dbhome - db Oracle Home.
 
 $crs_stat = `crsctl stat res -t -w "TYPE = ora.database.type"`	#|head -20  for debugging
@@ -93,13 +95,20 @@ foreach my $line (split /\n/, $crs_stat)
 {	if ($line =~ /^ora\.(.+?)\.db$/)
 	{	$db = $1;
 		print "Pulling srvctl config database -d $db ...\n";
-		for my $srvline (`srvctl config database -d $db`)
+		my $dbcfg = `srvctl config database -d $db`;
+		if ($dbcfg =~ /. Instead run the program from (.+?)\.$/s)
+		{	#sometimes srvctl has to be run from a specific OH:
+			$dbcfg = `$1/bin/srvctl config database -d $db`;
+			print "$db uses another OH $1\n"	if DEBUG;
+		}
+		for my $srvline (split /\n/, $dbcfg)
 		{	next if $srvline !~ /^(.+?): (.+)$/;
 			my ($name,$val) = ($1,$2);
-			   if ($name =~ /^Type$/i ) 	   { $dbtype{$db}=$val }
-			elsif ($name =~ /^Oracle home$/i ) { $dbhome{$db}=$val }
+			   if ($name =~ /^Type$/i ) 	   		{ $dbtype{$db}=$val }
+			elsif ($name =~ /^Oracle home$/i ) 		{ $dbhome{$db}=$val }
+			elsif ($name =~ /^Database instances/i ){ $inst{$db}=$val }
 		}
-		print "Type $dbtype{$db}; OH $dbhome{$db}\n"  if DEBUG;
+		print "Type $dbtype{$db}; OH $dbhome{$db}; instances: $inst{$db}\n"  if DEBUG;
 	}
 	else
 	{	#      1        ONLINE  ONLINE       v-craig                  Open
@@ -134,6 +143,10 @@ foreach my $db (sort keys %dbhome)
 		for (my $i=1;  $i<=$dbinst{$db};  $i++)
 		{	my $sid = "${db}_$i";
 			$allsid{$sid} = $dbhome{$db};	#all sids use the same dbhome
+			push @{$missing_on{$sid}}, $node  unless exists $oratab{$node}{$sid};
+		}
+		foreach my $sid (split /,/, $inst{$db})
+		{	$allsid{$sid} = $dbhome{$db};	#all sids use the same dbhome
 			push @{$missing_on{$sid}}, $node  unless exists $oratab{$node}{$sid};
 		}
 	}
