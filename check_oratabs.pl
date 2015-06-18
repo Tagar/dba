@@ -15,7 +15,7 @@
 =cut
 
 use strict;
-use constant (DEBUG => 0);
+use constant (DEBUG => 1);
 use Getopt::Long;
 
 my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
@@ -36,7 +36,7 @@ if ($apply) #Apply mode:
 		#1. Save original remote file locally
 		my ($saved_fname, $i);
 		do {	$saved_fname = "./oratab-$node.saved";
-				$saved_fname .= "_$i" if $i++;			#don't overwrite .saved files - find a new filename
+				$saved_fname .= "_$i" if $i++;
 		} while -e $saved_fname;
 		my $scp = `scp $quite_ssh $node:/etc/oratab $saved_fname`;
 		$? == 0 || die "Could not save /etc/oratab from $node: $!";
@@ -57,6 +57,7 @@ my $crs_stat = `crsctl stat res -t -w "TYPE = ora.cluster_vip_net1.type"`	#or ne
 	|| die "Error running crsctl stat res for vip: $!";
 my %oratab; #hash(by nodes) of hashes(by db/sid name), value is OH
 my %asmtab;	#hash(by node), value is ASM sid colon(:) GI home
+my %allsid;	#all possible dbs and sids, used in later steps
 my $quite_ssh = '-q -o PasswordAuthentication=no -o StrictHostKeyChecking=no';
 foreach my $line (split /\n/, $crs_stat)
 {	next if $line !~ /^ora\.(.+?)\.vip$/;
@@ -70,7 +71,9 @@ foreach my $line (split /\n/, $crs_stat)
 		s/^\s*(.*?)\s*$/$1/;	#remove trailing and heading whitespaces
 		next unless /^([^:]+):([^:]+):[YN]/i;
 		if (substr($_,0,1) eq '+') 
-		          {	$asmtab{$node}="$1:$2" }		#ASM entry (assuming just one)
+		         {	$asmtab{$node}="$1:$2";				#ASM entry (assuming just one)
+				$allsid{"-MGMTDB"}=$2	##if $2 =~ /\b12\.[12]\b/;	#adding MGMTDB entry for 12c databases
+			 }
 			 else {	$oratab{$node}{$1}=$2  }		#db db/sid entry
 	}
 	print "  ".(scalar keys %{$oratab{$node}})." oratab entries found.\n";
@@ -81,10 +84,9 @@ foreach my $line (split /\n/, $crs_stat)
 print "\n";
 
 #2. Checking all databases
-my (%dbtype,%dbhome,%inst,%dbinst);
+my (%dbtype,%dbinst,%dbhome);
 # %dbtype - RAC, RACOneNode (or SingleInstance - check if there are any);
 # %dbinst - how many instances have a RAC database;
-# %inst   - list of comma-separated instances from srvctl's "Database instances"
 # %dbhome - db Oracle Home.
 
 $crs_stat = `crsctl stat res -t -w "TYPE = ora.database.type"`	#|head -20  for debugging
@@ -94,26 +96,21 @@ my $db;
 foreach my $line (split /\n/, $crs_stat)
 {	if ($line =~ /^ora\.(.+?)\.db$/)
 	{	$db = $1;
-		print "Pulling srvctl config database -d $db ...\n";
-		my $dbcfg = `srvctl config database -d $db`;
-		if ($dbcfg =~ /. Instead run the program from (.+?)\.$/s)
-		{	#sometimes srvctl has to be run from a specific OH:
-			$dbcfg = `$1/bin/srvctl config database -d $db`;
-			print "$db uses another OH $1\n"	if DEBUG;
-		}
-		for my $srvline (split /\n/, $dbcfg)
-		{	next if $srvline !~ /^(.+?): (.+)$/;
+		print "Pulling crsctl stat res ora.$db.db -p ...\n";
+		## for my $srvline (`srvctl config database -d $db`)
+		for my $srvline (`crsctl stat res ora.$db.db -p`)
+		{	next if $srvline !~ /^(.+?)=(.+)$/;
 			my ($name,$val) = ($1,$2);
-			   if ($name =~ /^Type$/i ) 	   		{ $dbtype{$db}=$val }
-			elsif ($name =~ /^Oracle home$/i ) 		{ $dbhome{$db}=$val }
-			elsif ($name =~ /^Database instances/i ){ $inst{$db}=$val }
+			   if ($name =~ /^DATABASE_TYPE$/i )    { $dbtype{$db}=$val }
+			elsif ($name =~ /^ORACLE_HOME$/i ) 	{ $dbhome{$db}=$val }
 		}
-		print "Type $dbtype{$db}; OH $dbhome{$db}; instances: $inst{$db}\n"  if DEBUG;
+		print "Type $dbtype{$db}; OH $dbhome{$db}\n"  if DEBUG;
 	}
 	else
 	{	#      1        ONLINE  ONLINE       v-craig                  Open
 		next if $line !~ /^\s+(\d+)\s+(online|offline|intermediate)\s+/i;
-		$dbinst{$db}=$1  if $dbinst{$db} < $1;
+		my $cnt = $dbtype{$db} eq 'RACOneNode' ? 2: $1;
+		$dbinst{$db}=$cnt  if $dbinst{$db} < $cnt;
 		print "Instance count set to $dbinst{$db}\n"  if DEBUG;
 	}
 }
@@ -135,7 +132,6 @@ print "\n";
 
 #4.1. Check entries that are missing in the oratabs:
 my %missing_on;	#key is db or sid, value is list of nodes
-my %allsid;		#all possible dbs and sids, used in later steps
 foreach my $db (sort keys %dbhome)
 {	foreach my $node (keys %oratab)
 	{	push @{$missing_on{$db}}, $node  unless exists $oratab{$node}{$db};
@@ -143,10 +139,6 @@ foreach my $db (sort keys %dbhome)
 		for (my $i=1;  $i<=$dbinst{$db};  $i++)
 		{	my $sid = "${db}_$i";
 			$allsid{$sid} = $dbhome{$db};	#all sids use the same dbhome
-			push @{$missing_on{$sid}}, $node  unless exists $oratab{$node}{$sid};
-		}
-		foreach my $sid (split /,/, $inst{$db})
-		{	$allsid{$sid} = $dbhome{$db};	#all sids use the same dbhome
 			push @{$missing_on{$sid}}, $node  unless exists $oratab{$node}{$sid};
 		}
 	}
@@ -215,7 +207,9 @@ foreach my $node (sort keys %oratab)
 	$? == 0 || die "Could not fetch list of processes from $node: $!";
 	foreach my $sid (split /\n/, $pmons)
 	{	
-		if ( substr($sid,0,1) eq '+' ? $asmtab{$node} !~ /^\Q$sid\E:/ : !$allsid{$sid} )
+		if ( substr($sid,0,1) eq '+' 
+			? $asmtab{$node} !~ /^\Q$sid\E:/ 
+			: !$allsid{$sid} )
 		{ print "pmon for unknown sid $sid is running on $node. Will not be added to oratab.good files.\n" }
 	}
 }
@@ -237,3 +231,5 @@ sub prompt_yn {
 }
 
 
+
+'rdautkhanov@epsilon.com 2014'
