@@ -5,7 +5,7 @@ use constant MPATH  => '/sbin/multipath';
 use constant IOSTAT => '/usr/bin/iostat';
 
 die "Please run as root for multipath -l to work\n" if $>;
-die "No paramers expected for this script.\n" if @ARGV;
+die "No parameters expected for this script.\n" if @ARGV;
 
 
 open (my $mpath, '-|', MPATH, '-l') or die $!;
@@ -35,7 +35,7 @@ while (my $line = <$mpath>)
 		undef @disknames;
 		close $iostat;
 
-		my ($min,$max) = (sort {$a<=>$b} @reads)[1,-1];  #index=0 containes column header
+		my ($min,$max) = (sort {$a<=>$b} @reads)[1,-1];  #index=0 contains column header
 		if ($min>100_000)
 		{	my $disbalance = sprintf "%.05f", ($max/$min -1.0);
 			print "\tDisbalance=$disbalance\%\n";
