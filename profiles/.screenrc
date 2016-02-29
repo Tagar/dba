@@ -1,0 +1,28 @@
+autodetach on
+
+setenv ENV ~/.profile
+setenv VIMRC ~/.vimrc
+shell -${SHELL}
+
+defscrollback 20000
+startup_message off
+hardstatus on
+
+altscreen on
+
+vbell off
+hardstatus alwayslastline
+hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %d/%m %{W}%c %{g}]'
+
+# height 50
+# width 120
+
+screen 0 sh
+title "sh0"
+screen 1 sh
+title "sh1"
+screen 2 sh
+title "sh2"
+
+termcapinfo xterm* 'hs:ts=\E]0;:fs=\007:ds=\E]0;\007'
+## defhstatus "screen ^E (^Et) | $USER@^EH"
