@@ -10,8 +10,8 @@ nmap <F4> :set number<CR>
 " F5 Set Case Insensitive searching
 nmap <F5> :set ic<CR>
 
-" F6 Display aditto style column numbers line
-nmap <F6> :r /home/abacus/bytes142<CR>
+" " F6 Display aditto style column numbers line
+" nmap <F6> :r /home/abacus/bytes142<CR>
 
 " F7 Make current position the end of the line when in REPLACE mode
 inoremap <F7> <ESC>lD
