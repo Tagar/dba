@@ -1,0 +1,101 @@
+
+# .screenrc that works better with screen shipped by default on RHEL7
+
+setenv ENV ~/.profile
+setenv VIMRC ~/.vimrc
+shell -${SHELL}
+
+setenv PS1 "${LOGNAME}@$(hostname -s) \${PWD##*/} \${ORACLE_SID} \$ "
+
+
+
+###### screenrc
+###### by then4116
+###### This config is aimed at powerusers, who work on a lot of machines, and need a lot of information at a glance
+###### It's intended to facilitate usage of deeply nested screen sessions, and complex layouts
+###### as such, it relies heavily on keybindings to modify other keybindings, and multi-key bindings
+###### default keybindings have been left mostly intact, but not completely
+###### IT'S RECOMMENDED TO READ THE CONFIG BEFORE USING IT
+
+##########################################################################################
+###### PLEASE DON'T FORGET change your .bashrc as specified at the end of the file! ######
+##########################################################################################
+
+### some options
+defscrollback 99999             # set scrollback buffer to 'a shitload'
+defutf8 on                      # set utf8
+vbell off                       # disable visual bell
+startup_message off             # disable startup message 'new screen ..'
+setenv DISPLAY ':0'             # eg for mplayer
+deflog off                      # enable/disable logging here
+logfile ~/screen.%n         # set log location
+## nethack off                     # nethack like notifications
+defmonitor off                  # turn off monitoring (for activity)
+activity "activity in %n"       # enable activity
+multiuser on                    # enable screen -x
+shell bash                      # default shell
+autodetach on                   # automatically detach upon hangup
+defnonblock 1
+mousetrack off                  # turn on if you want to switch regions via mouse click. Will interfere with text selection via mouse in xterm though, so off by defult.
+altscreen on
+msgwait 3                       # message display duration
+termcapinfo xterm|xterms|xs|rxvt ti@:te@        # use xterm's normal screen buffer (which includes scrollback). Makes scrolling back with mouse/touchpad in X11 useful.
+termcapinfo * Z0=\E[?3h:Z1=\E[?3l
+term screen-256color
+
+### some keybindings
+bind 'w' sessionname
+bind '\' quit   #'
+bind 'K' kill
+#bind 'F' flow
+
+hardstatus off
+# caption off
+
+# caption always "%?%{ Wk}%-Lw%?%{Rk}%n*%f %t%?(%u)%?%?%{Wk}%+Lw%? %{Rk}%=%c %{rk}%d/%M/%Y"
+# caption always "%3n %t%? @%u%?%? [%h]%?"
+
+
+# hardstatus string "%{+b Rk}(%{-b g}$LOGNAME@%H%{+b R}) (%{-b g}%C %a%{+b R}) %{-b g} %n %t %h"
+# hardstatus alwayslastline "%{+b kr}[ %H ] %{ky} Load: %l %-=%{kb} %c  %d.%m.%Y"
+# hardstatus alwayslastline "%{+b kr}[ %H ] %{kw} Load: %l %-=%  %{kb} %c:%s  %d.%m.%Y "
+# hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %m-%d %{W}%c %{g}]'
+# hardstatus alwayslastline '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %d/%m %{W}%c %{g}]'
+# hardstatus alwayslastline '%{= kG}%{C}Screen: %{c}%{= kG}[%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{C} %d-%m %{W}%c %{g}]'
+#  hardstatus string "%{.kc}%-w%{.kw}%n*%t%{-}%+w %= | %1` | %2`C | %3`/%4` | %5`% | %6`/%7` | %c %d/%m/%Y"
+# hardstatus alwayslastline '%{= M} %H%{= G} %l %= %{= w}%-w%{+b r}%n*%t%{-b r}%{w}%+w %= %{c}%d %D %{B}%c '
+
+# hardstatus alwayslastline '%{= M} %H%{= G} %l %= %{= w}%-w%{+b r}%n*%t%{-b r}%{w}%+w %= %{c}%d %D %{B}%c '
+hardstatus alwayslastline '%{= B} %H%{= G} %= %{= w}%-w%{+b r}%n*%t%{-b r}%{w}%+w %= %{c}%d %D %{B}%c '
+
+
+screen 0 sh
+title "sh0"
+screen 1 sh
+title "sh1"
+screen 2 sh
+title "sh2"
+
+
+
+##############################################################################
+###### ADDITIONAL STUFF (put it where specified; remember to uncomment) ######
+##############################################################################
+
+### this goes in your .bashrc, also for window autorenaming magic
+#case $TERM in
+#        screen*)
+#                # This is the escape sequence ESC k \w ESC \
+#                #Use path as titel
+#                SCREENTITLE='\[\ek\w\e\\\]'
+#                #Use program name as titel
+#                SCREENTITLEPROGRAM='\[\ek\e\\\]'
+#                # only one of them will be filled correctly
+#                ;;
+#        *)
+#                SCREENTITLE=''
+#                SCREENTITLEPROGRAM=''
+#                ;;
+#esac
+#PS1="${SCREENTITLEPROGRAM}${SCREENTITLE}${PS1}"
+
