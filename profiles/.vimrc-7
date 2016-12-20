@@ -1,0 +1,13 @@
+" do not insert comments automatically
+" autocmd FileType * setlocal formatoptions-=c formatoptions-=r formatoptions-=o
+
+" don't create .swp files
+set updatecount=0
+
+" RD - added on 8/27/2014
+:color desert
+
+" show line numbers
+:set number
+
+
